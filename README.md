@@ -2,7 +2,7 @@
 <h3 align="center">Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data</h3>
 
 **ExoFILT** is a Deep Learning binary classifier designed to identify bona fide exocytic events from live-cell imaging data in *Saccharomyces cerevisiae*.
-
+For more information on this pipeline, see [ExoFILT: Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data](https://www.biorxiv.org/content/10.64898/2026.02.27.708581v1)
 ---
 
 ## Overview
@@ -10,10 +10,10 @@
 This repository contains two main components:
 
 1. **ImageJ/Fiji scripts**  
-   Preprocessing and annotation GUIs to generate curated tracks.
+   Preprocessing and annotation GUIs to generate and curate tracks.
    
 2. **Neural network inference**  
-   A Jupyter notebook to classify tracks generated from preprocessing.
+   A Jupyter notebook to classify tracks using ExoFILT.
 
 The pipeline allows going from raw microscopy movies to unfiltered tracks, then filter them with ExoFILT, and finally curating them manually with an ImageJ GUI.
 
@@ -24,7 +24,7 @@ The repository includes the pretrained ExoFILT models used for inference, provid
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:GallegoLab/ExoFILT.git
+git clone https://github.com/GallegoLab/ExoFILT.git
 cd ExoFILT
 ```
 
@@ -43,6 +43,8 @@ The ImageJ scripts were developed and tested with:
   * Java 1.8.0_322
   * TrackMate v7.14.0
   * Jython scripting enabled
+  * Accurate Gaussian Blur plugin. 
+  
 A standard **Fiji** installation should contain the required dependencies.
   
 ### Scripts
@@ -53,6 +55,8 @@ A standard **Fiji** installation should contain the required dependencies.
 4) `4_Colocalization_GUI.py`: GUI for manual annotation of colocalization between channels.
 
 ### How to use
+
+All raw movies used in the ExoFILT work have been deposited in a [Zenodo repository](https://zenodo.org/records/18962705). These can be used as test data for the workflow presented here. CSV files with annotations can also be found in this repository: these files could be opened with the `3_Annotation_GUI.py` script to see examples of bona fide and ambiguous exocytic events.
 
 #### 1) Preprocessing
 Place raw movies in a folder named:
@@ -69,7 +73,9 @@ After selecting the appropiate parameters in the initial dialog, the script will
 These folders contain channel-separated movies, before and after preprocessing, respectively.
 
 #### 2) Automated Tracking
-Open `2_Tracking.py` in ImageJ and run it with Jython.
+To perform automated tracking, the plugin **`Accurate Gaussian Blur`** is required. To install this plugin, download [Accurate_Gaussian_Blur.class](https://imagej.net/ij/plugins/download/Accurate_Gaussian_Blur.class), copy to the plugins folder and restart ImageJ. 
+
+Open `2_Tracking.py` in ImageJ and run it with Jython. 
  
 The script runs **TrackMate** on the C1 movies located in:
 ```
