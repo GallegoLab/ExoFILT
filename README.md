@@ -2,8 +2,8 @@
 <h3 align="center">Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data</h3>
 
 **ExoFILT** is a Deep Learning binary classifier designed to identify bona fide exocytic events from live-cell imaging data in *Saccharomyces cerevisiae*.
+
 For more information on this pipeline, see [ExoFILT: Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data](https://www.biorxiv.org/content/10.64898/2026.02.27.708581v1)
----
 
 ## Overview
 
