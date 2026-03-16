@@ -60,7 +60,7 @@ def configure_tensorflow():
         except RuntimeError as e:
             print(f"GPU setup failed: {e}")
     else:
-        print("TensorFlow using CPU")
+        print("GPU not detected. TensorFlow using CPU")
 
 ##################################################
 # PREPROCESSING: PERMISSIVE FILTER + CROPPING
