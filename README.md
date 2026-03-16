@@ -1,25 +1,23 @@
 <h1 align="center">ExoFILT</h1>
 <h3 align="center">Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data</h3>
 
-**ExoFILT** is a Deep Learning binary classifier designed to identify bona fide exocytic events from live-cell imaging data in *Saccharomyces cerevisiae*.
+**ExoFILT** is a Deep Learning binary classifier designed to identify **bona fide exocytic events** from live-cell imaging data in *Saccharomyces cerevisiae*.
 
-For more information on this pipeline, see [ExoFILT: Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data](https://www.biorxiv.org/content/10.64898/2026.02.27.708581v1)
+For more details about this method, see [ExoFILT: Transfer learning for robust and accelerated analysis of exocytosis single-particle tracking data](https://www.biorxiv.org/content/10.64898/2026.02.27.708581v1)
 
 ## Overview
 
-This repository contains two main components:
+This repository provides a complete pipeline for the analysis of exocytosis events from live-cell imaging data. It contains two main components:
 
 1. **ImageJ/Fiji scripts**  
-   Preprocessing and annotation GUIs to generate and curate tracks.
+   Tools for preprocessing microscopy movies, performing automated tracking, and manually annotating tracks.
    
 2. **Neural network inference**  
-   A Jupyter notebook to classify tracks using ExoFILT.
+   A Jupyter notebook that applies **ExoFILT** to classify exocytic events.
 
-The pipeline allows going from raw microscopy movies to unfiltered tracks, then filter them with ExoFILT, and finally curating them manually with an ImageJ GUI.
+Pretrained ExoFILT models used for inference are provided in the repository under the `models/` directory.
 
-The repository includes the pretrained ExoFILT models used for inference, provided in the `models/` directory.
-
-## Installation
+## Installation (Neural Network inference)
 
 ### 1. Clone the repository
 
@@ -29,11 +27,26 @@ cd ExoFILT
 ```
 
 ### 2. Create and activate the Conda environment
+
+Two environments are provided depending on whether GPU is available.
+
+#### GPU Environment
 ```bash
-conda env create -f environment.yml
+conda env create -f environment_gpu.yml
+```
+#### CPU Environment
+
+If GPU is not available, use a simplified environment:
+```bash
+conda env create -f environment_cpu.yml
+```
+
+After installation, activate the environment:
+```bash
 conda activate exofilt
 ```
-This environment contains the required Python dependencies for neural network inference.
+
+This environment contains all required Python dependencies for running ExoFILT inference.
 
 ## ImageJ / Fiji Preprocessing & Annotation
 
@@ -45,18 +58,22 @@ The ImageJ scripts were developed and tested with:
   * Jython scripting enabled
   * Accurate Gaussian Blur plugin. 
   
-A standard **Fiji** installation should contain the required dependencies.
+A standard **Fiji** installation should contain the required dependencies, except `Accurate Gaussian Blur` plugin (see below installation details).
   
 ### Scripts
 
 1) `1_Preprocessing.py`: Preprocessing of simultaneous dual-color live-cell imaging movies.
-2) `2_Tracking.py`: Automated tracking of preprocessed movies using TrackMate.
+2) `2_Tracking.py`: Automated particle tracking of preprocessed movies using TrackMate.
 3) `3_Annotation_GUI.py`: GUI for manual annotation of individual tracks in channel 1.
 4) `4_Colocalization_GUI.py`: GUI for manual annotation of colocalization between channels.
 
-### How to use
+### Example data
 
-All raw movies used in the ExoFILT work have been deposited in a [Zenodo repository](https://zenodo.org/records/18962705). These can be used as test data for the workflow presented here. CSV files with annotations can also be found in this repository: these files could be opened with the `3_Annotation_GUI.py` script to see examples of bona fide and ambiguous exocytic events.
+All raw movies used in the ExoFILT study are available in a [Zenodo repository](https://zenodo.org/records/18962705). These datasets can be used to test the workflow. 
+
+The repository also includes **CSV files containing track annotations**, which can be loaded with the `3_Annotation_GUI.py` script to visualize examples of **bona fide** and **ambiguous** exocytic events.
+
+### Workflow
 
 #### 1) Preprocessing
 Place raw movies in a folder named:
@@ -65,7 +82,7 @@ Place raw movies in a folder named:
 ```
 Open `1_Preprocessing.py` in ImageJ and run it with Jython (*Language &rarr; Jython*). 
 
-After selecting the appropiate parameters in the initial dialog, the script will create two new folders:
+After selecting the appropiate parameters in the initial dialog, the script creates two new directories:
 ```
 2_Splitted
 3_Preprocessed
@@ -77,28 +94,28 @@ To perform automated tracking, the plugin **`Accurate Gaussian Blur`** is requir
 
 Open `2_Tracking.py` in ImageJ and run it with Jython. 
  
-The script runs **TrackMate** on the C1 movies located in:
+The script performs automated tracking using **TrackMate** on the C1 movies located in:
 ```
 3_Preprocessed
 ```
-It generates a list of tracks stored as:
+Tracking results are stored as:
 ```
 tracks_all.csv
 ```
-All tracking outputs are stored in a new folder:
+All tracking outputs are written to a new folder:
 ```
 4_Tracking
 ```
 
 #### 3) ExoFILT Filtering 
 
-The file `tracks_all.csv` can be filtered using **ExoFILT** (see the *Neural Network Inference* section below).
+The file `tracks_all.csv` can be filtered using **ExoFILT** via the neural network inference notebook (see below).
 
 #### 4) Manual Annotation 
 
-After filtering with ExoFILT, manual annotation can be performed.
+After ExoFILT filtering, manual annotation can be performed.
 
-Open:
+Run:
 ```
 3_Annotation_GUI.py
 ```
@@ -124,13 +141,12 @@ jupyter notebook
 
 ### 2. Run the inference notebook
 
-The notebook:
-
+Open:
 ```
 notebooks/inference.ipynb
 ```
 The notebook requires:
-  * Preprocessed movies (`3_Preprocessed`)
+  * Preprocessed movies in `3_Preprocessed`
   * A CSV file containing tracks to filter (e.g. `tracks_all.csv` generated by `2_Tracking.py`).
 
 ### Inference Workflow
@@ -138,17 +154,17 @@ The notebook requires:
 Briefly, the notebook performs the following steps:
 
 1) Apply a permissive parametric filter to the tracks
-2) Crop the filtered tracks from the movies
+2) Crop the filtered tracks from the movies (10x10 pixels videos)
 3) Load the cropped tracks
 4) Perform data augmentation
-5) Run inference using five runs of ExoFILT
-6) Compute a final ExoFILT score
+5) Run inference using five ExoFILT models
+6) Compute a final **ExoFILT score**
 
 Users can then select different thresholds on the ExoFILT score to obtain subsets of tracks for downstream manual annotation.
 
 ### Notes
   * The pipeline assumes the directory structure generated by the preprocessing scripts.
-  * Paths inside the notebook should be adjusted if data are stored in different locations.
+  * Paths inside the Jupyter Notebook should be adjusted if data are stored in different locations.
 
 
 
