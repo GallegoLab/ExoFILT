@@ -40,6 +40,33 @@ After installation, activate the environment:
 conda activate exofilt_gpu
 ```
 
+Set up environment variables for GPU:
+```bash
+mkdir -p $CONDA_PREFIX/etc/conda/activate.d $CONDA_PREFIX/etc/conda/deactivate.d \
+&& echo -e '#!/bin/sh\nexport LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"' > $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh \
+&& chmod +x $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh \
+&& echo -e '#!/bin/sh\nunset LD_LIBRARY_PATH' > $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh \
+&& chmod +x $CONDA_PREFIX/etc/conda/deactivate.d/env_vars.sh
+```
+
+**Restart the environment** (to make the new variables take effect):
+```bash
+conda deactivate
+conda activate exofilt_gpu
+```
+
+Check that TensorFlow detects the GPU:
+```bash
+python - <<END
+import tensorflow as tf
+print("TensorFlow version:", tf.__version__)
+gpus = tf.config.list_physical_devices('GPU')
+print("GPUs detected:", gpus)
+END
+```
+
+If everything works, you should see at least one GPY listed.
+
 #### CPU Environment
 
 If GPU is not available, use a simplified environment:
