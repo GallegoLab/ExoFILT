@@ -28,12 +28,18 @@ cd ExoFILT
 
 ### 2. Create and activate the Conda environment
 
-Two environments are provided depending on whether GPU is available.
+Two environments are provided depending on whether GPU is available. These environments contains all required Python dependencies for running ExoFILT inference.
 
 #### GPU Environment
 ```bash
 conda env create -f environment_gpu.yml
 ```
+
+After installation, activate the environment:
+```bash
+conda activate exofilt_gpu
+```
+
 #### CPU Environment
 
 If GPU is not available, use a simplified environment:
@@ -43,10 +49,8 @@ conda env create -f environment_cpu.yml
 
 After installation, activate the environment:
 ```bash
-conda activate exofilt
+conda activate exofilt_cpu
 ```
-
-This environment contains all required Python dependencies for running ExoFILT inference.
 
 ## ImageJ / Fiji Preprocessing & Annotation
 

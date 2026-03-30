@@ -1,17 +1,19 @@
-name: exofilt
+name: exofilt_cpu
 channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.9
+  - python=3.10
   - numpy=1.26
   - scipy=1.11
   - pandas=2.1
   - matplotlib=3.8
+  - seaborn=0.13
   - scikit-image=0.22
   - h5py=3.9
-  - pillow=9.4
+  - pillow=10.0
   - jupyterlab=4.0
   - pip
   - pip:
-      - tensorflow==2.10
+      - tensorflow==2.15
+      - streamlit==1.50.0

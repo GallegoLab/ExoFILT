@@ -1,4 +1,4 @@
-name: exofilt
+name: exofilt_gpu
 channels:
   - conda-forge
   - defaults
