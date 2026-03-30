@@ -28,9 +28,23 @@ cd ExoFILT
 
 ### 2. Create and activate the Conda environment
 
-Two environments are provided depending on whether GPU is available. These environments contains all required Python dependencies for running ExoFILT inference.
+Two environments are provided, one for easy installation (using only CPU) and one for fast Neural Network inference using GPU. Note that the GPU environment does not support the usage of the streamlit package due to different dependencies, so use the CPU environment for data visualization. 
 
-#### GPU Environment
+#### Easy installation: CPU Environment
+
+Create the conda environment and install the required packages:
+```bash
+conda env create -f environment_cpu.yml
+```
+
+After installation, activate the environment:
+```bash
+conda activate exofilt_cpu
+```
+
+#### Advanced installation: GPU Environment
+
+If a GPU is available, follow these steps to increase the inference speed.
 ```bash
 conda env create -f environment_gpu.yml
 ```
@@ -59,25 +73,14 @@ Check that TensorFlow detects the GPU:
 ```bash
 python - <<END
 import tensorflow as tf
-print("TensorFlow version:", tf.__version__)
+print("\n\nTensorFlow version:", tf.__version__)
 gpus = tf.config.list_physical_devices('GPU')
-print("GPUs detected:", gpus)
+print("GPUs detected:", gpus, "\n\n")
 END
 ```
 
-If everything works, you should see at least one GPU listed.
+If everything works, at least one GPU should appear listed.
 
-#### CPU Environment
-
-If GPU is not available, use a simplified environment:
-```bash
-conda env create -f environment_cpu.yml
-```
-
-After installation, activate the environment:
-```bash
-conda activate exofilt_cpu
-```
 
 ## ImageJ / Fiji Preprocessing & Annotation
 

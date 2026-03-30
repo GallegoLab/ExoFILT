@@ -12,6 +12,7 @@ dependencies:
   - h5py=3.9
   - pillow=10.0
   - jupyterlab=4.0
+  - typing_extensions>=4.6
   - cudatoolkit=11.8
   - cudnn=8.8
   - pip
