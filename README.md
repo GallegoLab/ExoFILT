@@ -65,7 +65,7 @@ print("GPUs detected:", gpus)
 END
 ```
 
-If everything works, you should see at least one GPY listed.
+If everything works, you should see at least one GPU listed.
 
 #### CPU Environment
 
