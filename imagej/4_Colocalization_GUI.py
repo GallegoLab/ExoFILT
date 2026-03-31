@@ -589,8 +589,8 @@ def run_TM_C2(raw_C2, crop_C2_start, crop_C2_stop, track_C1_start, track_C1_stop
                 "Suggestion:\n"
                 "Lower INIT_Q and/or MEAN_Q in the GUI and try again.\n"
                 "Typical values for dim signals:\n"
-                "  INIT_Q ≈ 1.5 – 2.5\n"
-                "  MEAN_Q ≈ 2.0 – 3.0"
+                "  INIT_Q: 1.5-2.5\n"
+                "  MEAN_Q: 2.0-3.0"
             ) % (INIT_Q, MEAN_Q)
     
             IJ.showMessage("TrackMate: No spots detected", msg)

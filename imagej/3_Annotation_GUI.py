@@ -587,7 +587,7 @@ def run_everything(params):
     
     # Load TrackMate CSV
     TM_table, relevant_columns_idx, column_names = load_trackmate_csv(path_csv, filename_csv_all, relevant_columns)
-    print relevant_columns_idx
+
     file_ids = get_file_ids(TM_table, relevant_columns_idx)
     num_tracks = TM_table.size()
     num_columns = len(column_names)
