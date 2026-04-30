@@ -1,6 +1,6 @@
 """
 Script:    Colocalization_GUI
-Version:   3.0.0
+Version:   3.0.1
 Author:    Eric Kramer i Rosado
 
 Description
@@ -675,6 +675,10 @@ def run_TM_C2(raw_C2, crop_C2_start, crop_C2_stop, track_C1_start, track_C1_stop
         }
        
         return (fm, selected_id, no_track_detected, model, final_notes, tracking_metadata)
+    else:
+        IJ.run("Close All")
+        frame.setVisible(False)
+        raise RuntimeError("Track Index dialog was cancelled by user.")
 
 #################################################################################
 #################################################################################
@@ -942,13 +946,19 @@ def run_everything():
     path_csv_out = os.path.join(path_csv, filename_csv_colocalizing)
     already_curated, rows_in_csv_out = load_already_curated(path_csv_out)
     
-    print "\n*************************************"
-    print "\tNumber of tracks:", num_tracks
-    print "\tAlready curated:", len(already_curated)
-    print "*************************************\n"
-    
     # Group uncurated tracks by FILE_ID
     tracks_by_file = group_uncurated_tracks(TM_table, already_curated)
+    
+    print "\n*************************************"
+    print "\tTotal tracks     : %d" % num_tracks
+    print "\tAlready curated  : %d" % len(already_curated)
+    print "\tRemaining tracks : %d" % sum(len(v) for v in tracks_by_file.values())
+    print "\tFiles to open    : %d" % len(tracks_by_file)
+    print "*************************************\n"
+    
+    if not tracks_by_file:
+        print "All tracks have already been curated. Nothing to do."
+        return
 
     # Define column names
     mandatory_columns = ["EXPERIMENT", "COLOCALIZE_ID", "CHANNEL", "FILE_ID", "NOTES"]
@@ -989,11 +999,11 @@ def run_everything():
         ##############################################
         ############## Open each movie ###############
         ##############################################
+        curated_in_session = 0
         
         # Process each file (FOV) that has tracks in the CSV
         for file_id, track_indices in sorted(tracks_by_file.items()):
-            print("\n")
-            print("Processing FILE_ID %d with %d uncurated tracks"%(file_id, len(track_indices)))
+            print "\nProcessing FILE_ID %d (%d uncurated tracks)" % (file_id, len(track_indices))
             # Generate the filenames for the whole FOVs of C1 and C2
             filename_wholeFOV_C1 = experiment + "_" + extra_name_FOV_C1 + "_" + str(file_id) + ".tif"
             filename_wholeFOV_C2 = experiment + "_" + extra_name_FOV_C2 + "_" + str(file_id) + ".tif"
@@ -1013,11 +1023,12 @@ def run_everything():
                 track_data = get_track_data(TM_table, i, column_names)
                 track_data["EXPERIMENT"] = str(experiment)
                 
-                print("\nC1 track info - start=%d - stop=%d - x=%.2f - y=%.2f"%(
+                print("\nC1 track %d/%d | start=%d | stop=%d | x=%.2f | y=%.2f"%(
+                        len(already_curated)+curated_in_session+1, num_tracks,
                         track_data["TRACK_START"], track_data["TRACK_STOP"],
                         track_data["TRACK_X_LOCATION"], track_data["TRACK_Y_LOCATION"]
                 ))
-                    
+                
                 # Crop the ROI around the track in both channels
                 crop_C1, crop_C1_start, crop_C1_stop, _, _, = crop_from_coordinates(
                     whole_FOV = whole_FOV_C1, crop_size = crop_size, 
@@ -1145,6 +1156,10 @@ def run_everything():
 
                 IJ.run("Close All")
                 IJ.run("Collect Garbage")
+                
+                curated_in_session += 1
+    
+    print "\nAnnotation has finished"
 
 
 ################################################################
@@ -1463,7 +1478,7 @@ if showAdvanced:
     advGui.addNumericField("MERGING_MAX_DISTANCE:", default_merging_max_distance, 2)
     advGui.addMessage(" ")
     advGui.addNumericField("LINKING_MAX_DISTANCE:", default_linking_max_distance, 2)
-    advGui.addNumericField("GAP_CLOSING_MAX_DISTANCE:", default_linking_max_distance, 2)
+    advGui.addNumericField("GAP_CLOSING_MAX_DISTANCE:", default_gap_closing_max_distance, 2)
     advGui.addNumericField("MAX_FRAME_GAP:", default_max_frame_gap, 0)
 
     advGui.showDialog()

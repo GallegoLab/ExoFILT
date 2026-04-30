@@ -1,7 +1,6 @@
-
 """
 Script:     Preprocessing pipeline for dual-color simultaneous live-cell imaging
-Version:    3.0.0
+Version:    3.0.1
 Author:     Eric Kramer i Rosado
 
 Description
@@ -35,7 +34,6 @@ from java.lang          import System
 from fiji.util.gui      import GenericDialogPlus
 
 #@ PrefService prefs 
-
 
 # ------------------------------------------------------------------------------
 # Splitting
@@ -175,7 +173,7 @@ def preprocess(input_path, output_path, rolling_radius = 60):
       - Set image properties (frames, pixel dimensions).
       - Save the preprocessed image.
     """
-    
+    IJ.run("Close All", "")
     if not os.path.exists(input_path):
         raise RuntimeError("Input file for preprocessing not found: %s" % input_path)
 
@@ -253,15 +251,24 @@ def process_folder(input_folder, output_splitted, output_preprocessed, naming_mo
       - Run beads correction (optional).
       - Preprocess each channel.
     """
+    IJ.run("Close All", "")
     
     if not os.path.exists(input_folder):
         raise RuntimeError("Input folder does not exist: %s" % input_folder)
     
-    for filename in sorted(os.listdir(input_folder)):
+    files = [f for f in sorted(os.listdir(input_folder)) if f.endswith(".ome.tif")]
+    
+    print "\n*******************************"
+    print "Number of files to process:%d" % (len(files))
+    print "*******************************\n"
+    
+    if not files:
+        print "No files matching the criteria found in %s" % input_path
+        return
+    
+    for i, filename in enumerate(files):
 
-        if not filename.endswith(".ome.tif"):
-            continue
-        print "\nProcessing", filename
+        print "\nProcessing file %d/%d: %s" %(i+1, len(files), filename)
         filename_noext = filename[:-len(".ome.tif")]
         
         try:
@@ -387,6 +394,9 @@ if not os.path.exists(output_preprocessed):
 
 # Define paths relative to the selected root folder
 if align:
+    print "\n*******************************"
+    print "Alignment will be performed"
+    print "*******************************"
     path_calibration = os.path.join(root_folder, "0_Beads", "chromatic_calibration.txt")
     # Check for plugin DoM installation
     ij_dir = System.getProperty("ij.dir")  # Get Fiji's installation folder
@@ -397,9 +407,10 @@ if align:
             "Error: The required plugin 'Detection of Molecules' (DoM) is missing from Fiji's plugins folder.\n"
             "Please install it from: https://github.com/UU-cellbiology/DoM_Utrecht."
         )
-    else:
-        print "Found DoM plugin"
 else:
+    print "\n*******************************"
+    print "Alignment will NOT be performed"
+    print "*******************************"
     path_calibration = None
     
 # ------------------------------------------------------------------------------

@@ -1,14 +1,12 @@
-
 """
 Script:     Automated tracking of exocytic events using TrackMate
-Version:    3.0.0
+Version:    3.0.1
 Author:     Eric Kramer i Rosado
 
 Description
 -----------
-    Perform automated detection and tracking of exocytic events in dual-color live-cell imaging datasets.
-    Tracking is performed on channel 1 using TrackMate. The script exports CSV tables containing spot-level 
-    and track-level features for downstream analysis.
+    Perform automated detection and tracking of exocytic events in single-color live-cell imaging data.
+    The script exports CSV tables containing spot-level and track-level features for downstream analysis.
     
 Pipeline
 -----------
@@ -61,19 +59,18 @@ def run():
     """ 
     Iterate over all files in input_path containing the C1 identifier and run the processing pipeline.
     """
-    files = [f for f in os.listdir(input_path) if contain_string_C1 in f]
+    files = sorted([f for f in os.listdir(input_path) if contain_string_C1 in f])
     
     print "\n*******************************"
     print "Number of files to process:%d" % (len(files))
-    print "*******************************\n"
+    print "*******************************"
     
     if not files:
         print "No files matching the criteria found in %s" % input_path
         return
         
-    for filename in sorted(files):
-        print "\nFILENAME:", filename
-        
+    for i, filename in enumerate(files):
+        print "\nProcessing file %d/%d: %s" %(i+1, len(files), filename)
         # Check for file extension
         if not filename.endswith(file_extension):
             print "Filename does not have the required extension (%s). File skipped: %s" % (file_extension, filename)
@@ -108,17 +105,16 @@ def preprocess(imp):
     (imp_processed, imp_DoG)
     """
 
-    print "Preprocessing..."
+    print "\tPreprocessing..."
     
     # Set calibration parameters
-    TimeUnit = "unit"
     newCal = Calibration()
     newCal.pixelWidth = 1
     newCal.pixelHeight = 1
     newCal.frameInterval = 1
     newCal.setXUnit("pixel")
     newCal.setYUnit("pixel")
-    newCal.setTimeUnit(TimeUnit)
+    newCal.setTimeUnit("unit")
     
     imp.setCalibration(newCal)
     cal = imp.getCalibration()
@@ -129,7 +125,6 @@ def preprocess(imp):
     num_frames = imp.getNFrames()
     
     print"\tImage dimensions: width=%d, height=%d, frames=%d" % (width, height, num_frames)
-    print"\tCalibration: pixelWidth=%.2f, pixelHeight=%.2f, frameInterval=%.2f" % (cal.pixelWidth, cal.pixelHeight, cal.frameInterval)
     
     if width <= 0 or height <= 0:
         raise RuntimeError("Invalid image dimensions: width or height is zero or negative!")
@@ -175,7 +170,7 @@ def process(input_path, output_path, filename):
       - Optionally display the results.
     """
     # Parse filename
-    filename_noext = filename.split(".")[0] # Remove file extension (.tif)
+    filename_noext = os.path.splitext(filename)[0] # Remove file extension (.tif)
     parts = filename_noext.split("_")
 
     try:
@@ -189,6 +184,7 @@ def process(input_path, output_path, filename):
 
     # Open image
     image_path = os.path.join(input_path, filename)
+    imp = None
     try:
         imp = Opener.openUsingBioFormats(image_path)
         if imp is None:
@@ -207,6 +203,10 @@ def process(input_path, output_path, filename):
 
     # Preprocess image
     imp,imp_DoG = preprocess(imp)
+    
+    # Ensure that the DoG image is available
+    if imp_DoG is None:
+        raise RuntimeError("DoG image not available")
 
     cal = imp.getCalibration()
     width = imp.getWidth()
@@ -214,7 +214,7 @@ def process(input_path, output_path, filename):
     num_frames = imp.getNFrames()
     
     # Start the tracking
-    print "Started TrackMate..."
+    print "\tRunning TrackMate..."
     model = Model()
     
     #Read the image calibration
@@ -295,8 +295,6 @@ def process(input_path, output_path, filename):
 
         q_in_aft  = 0
         q_in_bef  = 0
-        q2_in_aft = 0
-        q2_in_bef = 0
         
         # Calculate Q_IN and Q_ENV for each spot in the track
         for spot in track:
@@ -305,10 +303,6 @@ def process(input_path, output_path, filename):
             frame = spot.getFeature('FRAME')
             radius = spot.getFeature('RADIUS')
             
-            # Ensure that the DoG image is available
-            if imp_DoG is None:
-                raise RuntimeError("DoG image not available for quality measurements.")
-
             # Q_IN: intensity measured directly within ROI defined by the spot radius
             imp_DoG.setSlice(int(frame + 1))
             imp_DoG.setRoi(OvalRoi(x-radius+0.5, y-radius+0.5, 2*radius, 2*radius))
@@ -340,37 +334,28 @@ def process(input_path, output_path, filename):
                 q_env_mean = 0
             q_track_env_mean += q_env_mean
             
-        # Compute quality before and after start/end, leaving a gap of `time_window`
-        skip_gap = time_window_bef_aft  # Number of frames to skip before measuring
+        # Compute quality before and after start/end, leaving a gap of `time_window_bef_aft`
         
         # Measure intensity in the frames before track_start, leaving a gap
         for i in range(time_window_bef_aft):
-            imp_DoG.setSlice(int(track_start - skip_gap - i + 1))
+            imp_DoG.setSlice(int(track_start - time_window_bef_aft - i + 1))
             imp_DoG.setRoi(OvalRoi(x_mean-radius+0.5, y_mean-radius+0.5, 2*radius, 2*radius))
             stats_r = imp_DoG.getStatistics()
             q_in_bef += stats_r.mean
-            q2_in_bef += stats_r.mean**2
             
         # Measure intensity in the frames after track_stop, leaving a gap
         for i in range(time_window_bef_aft):
-            imp_DoG.setSlice(int(track_stop + skip_gap + i + 1))  # +1 because setSlice is 1-based
+            imp_DoG.setSlice(int(track_stop + time_window_bef_aft + i + 1))  # +1 because setSlice is 1-based
             imp_DoG.setRoi(OvalRoi(x_mean-radius+0.5, y_mean-radius+0.5, 2*radius, 2*radius))
             stats_r = imp_DoG.getStatistics()
             q_in_aft += stats_r.mean
-            q2_in_aft += stats_r.mean**2
             
         # Compute averages
         q_in_aft  = q_in_aft/time_window_bef_aft
-        q2_in_aft = q2_in_aft/time_window_bef_aft
         q_in_bef  = q_in_bef/time_window_bef_aft
-        q2_in_bef = q2_in_bef/time_window_bef_aft
         q_track_in_mean = q_track_in_mean/(track_stop-track_start+1)
         q_track_env_mean = q_track_env_mean/(track_stop-track_start+1)
-        
-        # Compute standard deviations
-        std_bef = math.sqrt(abs(q2_in_bef - q_in_bef**2))
-        std_aft = math.sqrt(abs(q2_in_aft - q_in_aft**2))
-        
+
         fm.putTrackFeature(id,"TRACK_MEAN_Q_IN",q_track_in_mean)
         fm.putTrackFeature(id,"TRACK_MEAN_Q_ENV",q_track_env_mean)
         fm.putTrackFeature(id,"TRACK_MEAN_Q_IN_AFTER",q_in_aft)
@@ -379,109 +364,109 @@ def process(input_path, output_path, filename):
     #----------------
     # Writing CSV results 
     #----------------
-    write_output = True
-    if write_output:
-        
-        # Ensure output subdirectories exist
-        path_allspots = os.path.join(output_path, "individual_movies_all_spots")
-        path_spotsmodified = os.path.join(output_path, "individual_movies_spots_modified")
-        path_tracks = os.path.join(output_path, "individual_movies_tracks")
-        
-        for path in [path_allspots, path_spotsmodified, path_tracks]:
-            if not os.path.exists(path):
-                os.mkdir(path)
-        
-        filename_all_spots_csv = os.path.join(path_allspots, experiment_channel_id + "_allspots.csv")
-        filename_spots_modified = os.path.join(path_spotsmodified, experiment_channel_id + "_spotsmodified.csv")
-        filename_tracks = os.path.join(path_tracks, experiment_channel_id + "_tracks.csv")
-        
-        spots = model.getSpots().iterator(False)
-        
-        # Write CSV for all spots
-        with open(filename_all_spots_csv, "wb") as spotfile:
+    
+    # Ensure output subdirectories exist
+    path_allspots = os.path.join(output_path, "individual_movies_all_spots")
+    path_spotsmodified = os.path.join(output_path, "individual_movies_spots_modified")
+    path_tracks = os.path.join(output_path, "individual_movies_tracks")
+    
+    for path in [path_allspots, path_spotsmodified, path_tracks]:
+        if not os.path.exists(path):
+            os.mkdir(path)
+    
+    filename_all_spots_csv = os.path.join(path_allspots, experiment_channel_id + "_allspots.csv")
+    filename_spots_modified = os.path.join(path_spotsmodified, experiment_channel_id + "_spotsmodified.csv")
+    filename_tracks = os.path.join(path_tracks, experiment_channel_id + "_tracks.csv")
+    
+    spots = model.getSpots().iterator(False)
+    
+    # Write CSV for all spots
+    with open(filename_all_spots_csv, "wb") as spotfile:
 
-            writer = csv.writer(spotfile)
-            writer.writerow(["QUALITY","POSITION_X","POSITION_Y","FRAME","MEAN_INTENSITY_CH1"])
+        writer = csv.writer(spotfile)
+        writer.writerow(["QUALITY","POSITION_X","POSITION_Y","FRAME","MEAN_INTENSITY_CH1"])
 
-            for spot in spots:
-                writer.writerow([
-                    spot.getFeature("QUALITY"),
-                    spot.getFeature("POSITION_X"),
-                    spot.getFeature("POSITION_Y"),
-                    spot.getFeature("FRAME"),
-                    spot.getFeature("MEAN_INTENSITY_CH1")
-                ])
-        
-        # Write CSV for tracks and modified spots
-        with open(filename_tracks, "wb") as trackfile:
-            writer1 = csv.writer(trackfile)
-            writer1.writerow([
-                "EXPERIMENT",
-                "FILE_ID",
+        for spot in spots:
+            writer.writerow([
+                spot.getFeature("QUALITY"),
+                spot.getFeature("POSITION_X"),
+                spot.getFeature("POSITION_Y"),
+                spot.getFeature("FRAME"),
+                spot.getFeature("MEAN_INTENSITY_CH1")
+            ])
+    
+    # Write CSV for tracks and modified spots
+    with open(filename_tracks, "wb") as trackfile:
+        writer1 = csv.writer(trackfile)
+        writer1.writerow([
+            "EXPERIMENT",
+            "FILE_ID",
+            "TRACK_ID",
+            "TRACK_DURATION",
+            "TRACK_START",
+            "TRACK_STOP",
+            "TRACK_X_LOCATION",
+            "TRACK_Y_LOCATION",
+            "TRACK_DISPLACEMENT",
+            "MAX_DISTANCE_TRAVELED",
+            "TRACK_MEAN_SPEED",
+            "TRACK_MEDIAN_SPEED",
+            "TRACK_MAX_SPEED",
+            "TRACK_MIN_SPEED",
+            "TRACK_STD_SPEED",
+            "TRACK_MEAN_QUALITY",
+            "TRACK_MEAN_Q_IN",
+            "TRACK_MEAN_Q_ENV",
+            "TRACK_MEAN_Q_IN_BEFORE",
+            "TRACK_MEAN_Q_IN_AFTER",
+            "CONFINEMENT_RATIO"])
+                          
+        with open(filename_spots_modified, "wb") as spotfile:
+            writer2 = csv.writer(spotfile)
+            writer2.writerow([
+                "ID",
                 "TRACK_ID",
-                "TRACK_DURATION",
-                "TRACK_START",
-                "TRACK_STOP",
-                "TRACK_X_LOCATION",
-                "TRACK_Y_LOCATION",
-                "TRACK_DISPLACEMENT",
-                "MAX_DISTANCE_TRAVELED",
-                "TRACK_MEAN_SPEED",
-                "TRACK_MEDIAN_SPEED",
-                "TRACK_MAX_SPEED",
-                "TRACK_MIN_SPEED",
-                "TRACK_STD_SPEED",
-                "TRACK_MEAN_QUALITY",
-                "TRACK_MEAN_Q_IN",
-                "TRACK_MEAN_Q_ENV",
-                "TRACK_MEAN_Q_IN_BEFORE",
-                "TRACK_MEAN_Q_IN_AFTER",
-                "CONFINEMENT_RATIO"])
-                              
-            with open(filename_spots_modified, "wb") as spotfile:
-                writer2 = csv.writer(spotfile)
-                writer2.writerow([
-                    "ID",
-                    "TRACK_ID",
-                    "QUALITY",
-                    "POSITION_X",
-                    "POSITION_Y",
-                    "FRAME",
-                    "RADIUS",
-                    "MEAN_INTENSITY_CH1",
-                    "MEDIAN_INTENSITY_CH1",
-                    "MIN_INTENSITY_CH1",
-                    "MAX_INTENSITY_CH1",
-                    "STD_INTENSITY_CH1",
-                    "CONTRAST_CH1",
-                    "SNR_CH1"
+                "QUALITY",
+                "POSITION_X",
+                "POSITION_Y",
+                "FRAME",
+                "RADIUS",
+                "MEAN_INTENSITY_CH1",
+                "MEDIAN_INTENSITY_CH1",
+                "MIN_INTENSITY_CH1",
+                "MAX_INTENSITY_CH1",
+                "STD_INTENSITY_CH1",
+                "CONTRAST_CH1",
+                "SNR_CH1"
+            ])
+        
+            for id in model.getTrackModel().trackIDs(True):
+                # Fetch the track feature from the feature model
+                track = model.getTrackModel().trackSpots(id)
+                            
+                writer1.writerow([
+                    experiment_name, file_id, fm.getTrackFeature(id, "TRACK_ID"),
+                    fm.getTrackFeature(id, "TRACK_DURATION"),fm.getTrackFeature(id, "TRACK_START"),fm.getTrackFeature(id, "TRACK_STOP"),
+                    fm.getTrackFeature(id, "TRACK_X_LOCATION"),fm.getTrackFeature(id, "TRACK_Y_LOCATION"), 
+                    fm.getTrackFeature(id, "TRACK_DISPLACEMENT"),fm.getTrackFeature(id, "MAX_DISTANCE_TRAVELED"),
+                    fm.getTrackFeature(id, "TRACK_MEAN_SPEED"),fm.getTrackFeature(id, "TRACK_MEDIAN_SPEED"),
+                    fm.getTrackFeature(id, "TRACK_MAX_SPEED"),fm.getTrackFeature(id, "TRACK_MIN_SPEED"),fm.getTrackFeature(id, "TRACK_STD_SPEED"),
+                    fm.getTrackFeature(id, "TRACK_MEAN_QUALITY"),fm.getTrackFeature(id, "TRACK_MEAN_Q_IN"),fm.getTrackFeature(id, "TRACK_MEAN_Q_ENV") , 
+                    fm.getTrackFeature(id, "TRACK_MEAN_Q_IN_BEFORE"),fm.getTrackFeature(id, "TRACK_MEAN_Q_IN_AFTER"),
+                    fm.getTrackFeature(id, "CONFINEMENT_RATIO")
                 ])
-            
-                for id in model.getTrackModel().trackIDs(True):
-                    # Fetch the track feature from the feature model
-                    track = model.getTrackModel().trackSpots(id)
-                                
-                    writer1.writerow([
-                        experiment_name, file_id, fm.getTrackFeature(id, "TRACK_ID"),
-                        fm.getTrackFeature(id, "TRACK_DURATION"),fm.getTrackFeature(id, "TRACK_START"),fm.getTrackFeature(id, "TRACK_STOP"),
-                        fm.getTrackFeature(id, "TRACK_X_LOCATION"),fm.getTrackFeature(id, "TRACK_Y_LOCATION"), 
-                        fm.getTrackFeature(id, "TRACK_DISPLACEMENT"),fm.getTrackFeature(id, "MAX_DISTANCE_TRAVELED"),
-                        fm.getTrackFeature(id, "TRACK_MEAN_SPEED"),fm.getTrackFeature(id, "TRACK_MEDIAN_SPEED"),
-                        fm.getTrackFeature(id, "TRACK_MAX_SPEED"),fm.getTrackFeature(id, "TRACK_MIN_SPEED"),fm.getTrackFeature(id, "TRACK_STD_SPEED"),
-                        fm.getTrackFeature(id, "TRACK_MEAN_QUALITY"),fm.getTrackFeature(id, "TRACK_MEAN_Q_IN"),fm.getTrackFeature(id, "TRACK_MEAN_Q_ENV") , 
-                        fm.getTrackFeature(id, "TRACK_MEAN_Q_IN_BEFORE"),fm.getTrackFeature(id, "TRACK_MEAN_Q_IN_AFTER"),
-                        fm.getTrackFeature(id, "CONFINEMENT_RATIO")
-                    ])
-                    
-                    for spot in track:
-                        writer2.writerow([
-                            spot.ID(),fm.getTrackFeature(id, "TRACK_ID"),
-                            spot.getFeature("QUALITY"),spot.getFeature("POSITION_X"),spot.getFeature("POSITION_Y"),
-                            spot.getFeature("FRAME"),spot.getFeature("RADIUS"),
-                            spot.getFeature("MEAN_INTENSITY_CH1"),spot.getFeature("MEDIAN_INTENSITY_CH1"),
-                            spot.getFeature("MIN_INTENSITY_CH1"),spot.getFeature("MAX_INTENSITY_CH1"),spot.getFeature("STD_INTENSITY_CH1"),
-                            spot.getFeature("CONTRAST_CH1"),spot.getFeature("SNR_CH1")])
+                
+                for spot in track:
+                    writer2.writerow([
+                        spot.ID(),fm.getTrackFeature(id, "TRACK_ID"),
+                        spot.getFeature("QUALITY"),spot.getFeature("POSITION_X"),spot.getFeature("POSITION_Y"),
+                        spot.getFeature("FRAME"),spot.getFeature("RADIUS"),
+                        spot.getFeature("MEAN_INTENSITY_CH1"),spot.getFeature("MEDIAN_INTENSITY_CH1"),
+                        spot.getFeature("MIN_INTENSITY_CH1"),spot.getFeature("MAX_INTENSITY_CH1"),spot.getFeature("STD_INTENSITY_CH1"),
+                        spot.getFeature("CONTRAST_CH1"),spot.getFeature("SNR_CH1")])
 
+    tracks_found = model.getTrackModel().nTracks(True)
+    print "\tFinished TrackMate: found %d tracks" %(tracks_found)
 
     #----------------
     # Display results
@@ -496,15 +481,13 @@ def process(input_path, output_path, filename):
         displayer.refresh()
         sequence = TrackMateWizardSequence( trackmate, selectionModel, ds)
         guiState = ConfigureViewsDescriptor.KEY
-        sequence.setCurrent( guiState );
-        frame = sequence.run("TrackMate importing CSV " )
-        GuiUtils.positionWindow( frame, imp.getWindow() );
-        frame.setVisible( True );
-        print "TrackMate has finished." 
-        IJ.run("Collect Garbage") # clean memory
+        sequence.setCurrent( guiState )
+        frame = sequence.run("TrackMate importing CSV ")
+        GuiUtils.positionWindow(frame, imp.getWindow())
+        frame.setVisible(True)
 
+        IJ.run("Collect Garbage") # clean memory
     else:
-        print "TrackMate has finished."
         IJ.run("Close All")
         IJ.run("Collect Garbage") # clean memory
 
@@ -529,7 +512,6 @@ def combine_csv_tracks(path_individual, path_all, filename_csv_all):
         writer = csv.writer(csv_all)
         
         for i, filename in enumerate(sorted(os.listdir(path_individual))):
-            print filename
             tracks_i = 0
             path_csv_file_i = os.path.join(path_individual, filename)
             
@@ -546,9 +528,9 @@ def combine_csv_tracks(path_individual, path_all, filename_csv_all):
                     tracks_i += 1
                     writer.writerow(row)
 
-            print "Number of tracks:", tracks_i
+            print "%s \tNumber of tracks: %d" %(filename, tracks_i)
             
-    print "\nA file with all tracks (N={0}) has been created.".format(total_tracks)
+    print "\nA file with all tracks (N=%d) has been created." %(total_tracks)
 
 # ------------------------------------------------------------------------------
 # GUI for user input
@@ -588,7 +570,7 @@ if showAdvanced:
     advGui = GenericDialogPlus("Advanced Tracking Parameters")
     advGui.addCheckbox("Show tracks", bool(prefs.getInt(None, "show_tracks", False)))
     advGui.addStringField("File extension:", prefs.get(None, "file_extension", "tif")) # Extension of the files used for tracking. Other files will be skipped
-    advGui.addStringField("String identifying C1 movies:", prefs.get(None, "contain_string_C1", "C1")) # Process only files from channel 1         
+    advGui.addStringField("String identifying C1 movies:", prefs.get(None, "contain_string_C1", "C1")) # Process only files from channel 1
     advGui.addMessage(" ")
     advGui.addNumericField("LINKING_MAX_DISTANCE:", prefs.getFloat(None, "LINKING_MAX_DISTANCE", 1.5), 2)
     advGui.addNumericField("GAP_CLOSING_MAX_DISTANCE:", prefs.getFloat(None, "GAP_CLOSING_MAX_DISTANCE", 2.0), 2)
@@ -619,17 +601,22 @@ if showAdvanced:
         time_window_bef_aft        = int(advGui.getNextNumber())
 
         # Save advanced parameters
-        prefs.put(None, "show_tracks", show_tracks)
-        prefs.put(None, "file_extension", file_extension)
-        prefs.put(None, "contain_string_C1", contain_string_C1)
-        prefs.put(None, "LINKING_MAX_DISTANCE", LINKING_MAX_DISTANCE)
-        prefs.put(None, "GAP_CLOSING_MAX_DISTANCE", GAP_CLOSING_MAX_DISTANCE)
-        prefs.put(None, "MAX_FRAME_GAP", MAX_FRAME_GAP)
-        prefs.put(None, "ALLOW_TRACK_SPLITTING", ALLOW_TRACK_SPLITTING)
-        prefs.put(None, "SPLITTING_MAX_DISTANCE", SPLITTING_MAX_DISTANCE)
-        prefs.put(None, "ALLOW_TRACK_MERGING", ALLOW_TRACK_MERGING)
-        prefs.put(None, "MERGING_MAX_DISTANCE", MERGING_MAX_DISTANCE)
-        prefs.put(None, "time_window_bef_aft", time_window_bef_aft)
+        prefs_dict = {
+            "show_tracks": show_tracks,
+            "file_extension": file_extension,
+            "contain_string_C1": contain_string_C1,
+            "LINKING_MAX_DISTANCE": LINKING_MAX_DISTANCE,
+            "GAP_CLOSING_MAX_DISTANCE": GAP_CLOSING_MAX_DISTANCE,
+            "MAX_FRAME_GAP": MAX_FRAME_GAP,
+            "ALLOW_TRACK_SPLITTING": ALLOW_TRACK_SPLITTING,
+            "SPLITTING_MAX_DISTANCE": SPLITTING_MAX_DISTANCE,
+            "ALLOW_TRACK_MERGING": ALLOW_TRACK_MERGING,
+            "MERGING_MAX_DISTANCE": MERGING_MAX_DISTANCE,
+            "time_window_bef_aft": time_window_bef_aft,
+        }
+        
+        for key, value in prefs_dict.items():
+            prefs.put(None, key, value)
         
 # Set advanced parameters to defaults or previously stored values
 show_tracks                 = bool(prefs.getInt(None, "show_tracks", False))

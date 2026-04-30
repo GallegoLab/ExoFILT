@@ -1,6 +1,6 @@
 """
 Script:    Annotation_GUI
-Version:   3.0.0
+Version:   3.0.1
 Author:    Eric Kramer i Rosado
 
 Description
@@ -17,6 +17,7 @@ Description
 # Standard libraries
 import csv
 import os
+from collections import defaultdict
 
 # ImageJ
 import ij
@@ -428,7 +429,7 @@ def load_trackmate_csv(path_csv, filename_csv_all, relevant_columns):
 
     column_names = TM_table.getColumnHeadings().split("\t")
     
-    print "Number of tracks:", TM_table.size()
+
 
     return TM_table, relevant_columns_idx, column_names
 
@@ -440,7 +441,6 @@ def get_file_ids(TM_table, relevant_columns_idx):
     """
     column_FILE_ID = [int(x) for x in TM_table.getColumnAsDoubles(relevant_columns_idx["FILE_ID"])]
     file_ids = sorted(set(column_FILE_ID))
-    print "\nFile IDs:", file_ids
 
     return file_ids
 
@@ -475,6 +475,60 @@ def load_already_curated_tracks(curated_csv_path, relevant_columns):
             already_curated.append(relevant_elements)
 
     return already_curated
+    
+    
+def load_already_curated(path):
+    """
+    Load the (FILE_ID, TRACK_ID) pairs already present in the curated CSV.
+
+    Returns:
+    
+        already_curated (set of tuples): {(FILE_ID, TRACK_ID), ...}
+    """
+    already_curated = set()
+
+    if not os.path.exists(path) or os.stat(path).st_size == 0:
+        return already_curated
+
+    with open(path, "rb") as f:
+        for row in csv.DictReader(f):
+            try:
+                file_id  = int(float(row["FILE_ID"]))
+                track_id = int(float(row["TRACK_ID"]))
+                already_curated.add((file_id, track_id))
+            except (KeyError, ValueError):
+                continue  # skip malformed rows
+
+    return already_curated
+    
+########################################################
+
+def group_uncurated_tracks(TM_table, already_curated):
+    """
+    Build a mapping of FILE_ID → [row indices] for every track
+    that has not yet been curated.
+
+    Parameters
+    ----------
+    TM_table       : ResultsTable.
+    already_curated: set of (FILE_ID, TRACK_ID) tuples.
+
+    Returns
+    -------
+    dict  {file_id (int): [row_index, ...]}
+    Only FILE_IDs that have at least one uncurated track appear as keys,
+    so iterating over this dict automatically skips files with no work to do.
+    """
+    tracks_by_file = defaultdict(list)
+
+    for i in range(TM_table.size()):
+        file_id  = int(TM_table.getStringValue("FILE_ID",  i))
+        track_id = int(TM_table.getStringValue("TRACK_ID", i))
+
+        if (file_id, track_id) not in already_curated:
+            tracks_by_file[file_id].append(i)
+
+    return tracks_by_file
     
 ########################################################
 
@@ -587,33 +641,48 @@ def run_everything(params):
     
     # Load TrackMate CSV
     TM_table, relevant_columns_idx, column_names = load_trackmate_csv(path_csv, filename_csv_all, relevant_columns)
-
-    file_ids = get_file_ids(TM_table, relevant_columns_idx)
+    
     num_tracks = TM_table.size()
     num_columns = len(column_names)
     
+    file_ids = get_file_ids(TM_table, relevant_columns_idx)
+
+    print "\n*************************************"
+    print "\tNumber of files: %d" % (len(file_ids))
+    print "\tFile IDs:", file_ids
+    print "*************************************"
+    
     # Curated CSV
     curated_csv_path = os.path.join(path_csv, filename_csv_curated)
-    already_curated = load_already_curated_tracks(curated_csv_path, relevant_columns)
-    print "Already curated tracks:", len(already_curated)
+    already_curated = load_already_curated(curated_csv_path)
+    tracks_by_file = group_uncurated_tracks(TM_table, already_curated)
 
-    # Convert already curated list of dicts to a set of tuples for faster duplicate checking
-    already_curated_set = set(tuple(sorted(track.items())) for track in already_curated)
+    print "\n*************************************"
+    print "\tTotal tracks     : %d" % num_tracks
+    print "\tAlready curated  : %d" % len(already_curated)
+    print "\tRemaining tracks : %d" % sum(len(v) for v in tracks_by_file.values())
+    print "\tFiles to open    : %d" % len(tracks_by_file)
+    print "*************************************\n
+    
+    if not tracks_by_file:
+        print "All tracks have already been curated. Nothing to do."
+        return
 
-    # Check if header already exists
+    # Prepare output CSV (append mode; write header only when creating the file)
     header_already_written = os.path.exists(curated_csv_path) and os.path.getsize(curated_csv_path) > 0
     
     with open(curated_csv_path, "ab") as curated: 
         writer = csv.writer(curated)
         
-        # Write header if CSV is empty
         if not header_already_written:
             write_csv_header(writer, column_names, show_reason_discarded)
     
-        # Loop through FOVs
-        for file_id in file_ids:
-            print("\nChecking tracks from file %d"%(file_id))
-            filename_wholeFOV = experiment + "_" + extra_name_fov + "_" + str(file_id) + ".tif"
+        # Iterate only over files that have uncurated tracks
+        curated_in_session = 0
+        
+        for file_id, track_indices in sorted(tracks_by_file.items()):
+            print "\nProcessing FILE_ID %d (%d uncurated tracks)" % (file_id, len(track_indices))
+            filename_wholeFOV = "%s_%s_%d.tif" % (experiment, extra_name_fov, file_id)
             print "FOV:", filename_wholeFOV
             
             fov_path = os.path.join(path_movies, filename_wholeFOV)
@@ -625,37 +694,21 @@ def run_everything(params):
             width, height, frames = whole_FOV.getWidth(), whole_FOV.getHeight(), whole_FOV.getNFrames()
             print "\tImage dimensions: width=%d, height=%d, frames=%d\n" % (width, height, frames)
             
-            # Loop through all tracks
-            for i in range(num_tracks):
+            
+            # Process only the pre-filtered row indices for this file
+            for i in track_indices:
                 
                 info_track = [TM_table.getValueAsDouble(col, i) for col in range(num_columns)]
                 info_track[TM_table.getColumnIndex("EXPERIMENT")] = TM_table.getStringValue("EXPERIMENT", i)
-                file_id_i = int(TM_table.getStringValue("FILE_ID", i))
-            
-                # Analyze only those tracks from the current file_id
-                if file_id_i != file_id:
-                    continue
                      
                 track_start = int(TM_table.getStringValue("TRACK_START", i))
                 track_stop = int(TM_table.getStringValue("TRACK_STOP", i))
                 track_x = float(TM_table.getStringValue("TRACK_X_LOCATION", i))
                 track_y = float(TM_table.getStringValue("TRACK_Y_LOCATION", i))
-                print "Track info: start=%d | stop=%d | x=%.2f | y=%.2f" % (track_start, track_stop, track_x, track_y)
-
-                # Build dict for this track to check duplicates
-                relevant_elements = {}
-                for column_name, column_idx in relevant_columns_idx.items():
-                    try:
-                        relevant_elements[column_name] = int(float(info_track[column_idx]))
-                    except:
-                        relevant_elements[column_name] = str(info_track[column_idx])
+                track_id = int(TM_table.getStringValue("TRACK_ID", i))
                 
-                # Skip already curated tracks
-                track_key = tuple(sorted(relevant_elements.items()))
-                if track_key in already_curated_set:
-                    print("Already labeled")
-                    continue
-                    
+                print "Track %d/%d: start=%d | stop=%d | x=%.2f | y=%.2f" % (len(already_curated)+curated_in_session+1, num_tracks, track_start, track_stop, track_x, track_y)
+
                 process_track(
                     whole_FOV = whole_FOV,
                     crop_size = crop_size,
@@ -673,8 +726,10 @@ def run_everything(params):
                     show_reason_discarded = show_reason_discarded,
                     filename_csv_all =filename_csv_all,
                 )
-                
+                curated_in_session += 1
             whole_FOV.close()
+            
+    print "\nAnnotation has finished"
 
 ########################################################
 

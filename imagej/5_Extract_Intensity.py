@@ -1,6 +1,6 @@
 """
 Script:    Extract_Intensity
-Version:   3.0.0
+Version:   3.0.1
 Author:    Eric Kramer i Rosado
 
 Description
@@ -106,29 +106,6 @@ def filter_allspots_C1(path, C1_track_id):
                 y = float(row["POSITION_Y"])
                 frame_to_spot[frame] = (x, y)
                 
-        # Read the first line to get column headers
-        #first_line = f.readline().strip()
-        #columns = first_line.split(",")
-        
-        # Get indices of relevant columns
-        #idx_track = columns.index("TRACK_ID")
-        #idx_frame = columns.index("FRAME")
-        #idx_x     = columns.index("POSITION_X")
-        #idx_y     = columns.index("POSITION_Y")
-        
-        # Read each spot
-        #for line in f:
-            #elements = line.strip().split(",")
-            # Extract TRACK_ID from the current line
-            #track_id_from_spot = int(float(elements[idx_track]))  
-            
-            ## Check if this spot belongs to the specified TRACK_ID
-           # if track_id_from_spot == C1_track_id:
-                #frame = int(float(elements[idx_frame]))
-                #x     = float(elements[idx_x])
-                #y     = float(elements[idx_y])
-                #frame_to_spot[frame] = (x, y)
-    
     return frame_to_spot
 
 def process_spots_C2(path):
@@ -234,11 +211,20 @@ def open_image(path):
 
 ###############################################
 
-def process(path_csv_colocalization, path_spots_C1, path_spots_C2, output_path):
+def process(params):
     """
     Processes colocalization data from C1-C2 tracks and extracts intensity profiles
     for all events, using pre-built frame-to-spot dictionaries for fast access.
     """
+    
+    experiment = params["experiment"]
+    path_csv_colocalization = params["csv_colocalization"]
+    extra_name_splitted_C1 = params["extra_name_splitted_C1"]
+    extra_name_splitted_C2 = params["extra_name_splitted_C2"]
+    path_movies_splitted = params["path_movies_splitted"]
+    path_spots_C1 = params["path_spots_C1"]
+    path_spots_C2 = params["path_spots_C2"]
+    output_path = params["path_intensity_profiles"]
     
     # Load colocalization CSV into ResultsTable
     IJ.open(path_csv_colocalization)
@@ -248,13 +234,13 @@ def process(path_csv_colocalization, path_spots_C1, path_spots_C2, output_path):
         raise ValueError("No data found in CSV file: " + filename_csv_coloc)
         
     column_COLOCALIZE_ID = table_coloc.getColumnAsDoubles(table_coloc.getColumnIndex("COLOCALIZE_ID"))
-    colocalize_ids = set([int(x) for x in column_COLOCALIZE_ID])
+    all_colocalize_ids = set([int(x) for x in column_COLOCALIZE_ID])
         
     column_FILE_ID = table_coloc.getColumnAsDoubles(table_coloc.getColumnIndex("FILE_ID"))
     file_ids = set([int(x) for x in column_FILE_ID])
     
     print "\n*************************************"
-    print "\tNumber of events:", len(colocalize_ids)
+    print "\tNumber of events:", len(all_colocalize_ids)
     print "\tNumber of movies:", len(file_ids)
     print "*************************************\n"
     
@@ -307,7 +293,7 @@ def process(path_csv_colocalization, path_spots_C1, path_spots_C2, output_path):
                     break
                     
             if C1_track_id is None:
-                raise ValueError("[ERROR] No TRACK_ID for COLOCALIZE_ID=%d in CHANNEL=1"%(coloc_id))
+                raise ValueError("[ERROR] No TRACK_ID for COLOCALIZE_ID=%d in CHANNEL=1"%(colocalize_id))
 
             # Path to spots CSVs
             filename_spots_C1 = experiment + "_C1_" + str(file_id) + "_spotsmodified.csv"
@@ -350,6 +336,12 @@ def process(path_csv_colocalization, path_spots_C1, path_spots_C2, output_path):
             
             outputC1.close()
             outputC2.close()
+            
+        whole_FOV_C1.close()
+        whole_FOV_C2.close()
+        IJ.run("Collect Garbage")
+    
+    print "\nProcess has finished"
     
     return all_tracks_data_C1, all_tracks_data_C2, num_frames
 
@@ -387,7 +379,7 @@ def show_gui_initial():
     default_extra_name_splitted_C2  = prefs.get(None, "extra_name_splitted_C2", DEFAULTS["extra_name_splitted_C2"])
     default_root                = prefs.get(None, "root_folder", DEFAULTS["root"])
     default_csv_colocalization  = prefs.get(None, "csv_colocalization", "")
-    default_plot_in_ImageJ      = bool(prefs.get(None, "plot_in_ImageJ", ""))
+    default_plot_in_ImageJ      = bool(prefs.getInt(None, "plot_in_ImageJ", 0))
 
     # Create the dialog
     gui_initial = GenericDialogPlus("Input from user")
@@ -430,7 +422,7 @@ def show_gui_initial():
             "extra_name_splitted_C2": extra_name_splitted_C2,
             "root_folder": root_folder,
             "csv_colocalization": csv_colocalization,
-            "plot_in_ImageJ": plot_in_ImageJ,
+            "plot_in_ImageJ": int(plot_in_ImageJ),
         }
         
         for key, value in prefs_dict.items():
@@ -482,26 +474,9 @@ def show_gui_initial():
 ################################################################
 
 params = show_gui_initial()
+data_C1, data_C2, num_frames = process(params)
 
-experiment = params["experiment"]
-csv_colocalization = params["csv_colocalization"]
-extra_name_splitted_C1 = params["extra_name_splitted_C1"]
-extra_name_splitted_C2 = params["extra_name_splitted_C2"]
-path_movies_splitted = params["path_movies_splitted"]
-path_spots_C1 = params["path_spots_C1"]
-path_spots_C2 = params["path_spots_C2"]
-path_intensity_profiles = params["path_intensity_profiles"]
 plot_in_ImageJ = params["plot_in_ImageJ"]
-
-
-data_C1, data_C2, num_frames = process(
-    path_csv_colocalization = csv_colocalization, 
-    path_spots_C1 = path_spots_C1,
-    path_spots_C2 = path_spots_C2,
-    output_path = path_intensity_profiles,
-)
-                     
-
 if plot_in_ImageJ:
     
     MAX_PLOTS = 5
